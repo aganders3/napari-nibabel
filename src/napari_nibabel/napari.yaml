@@ -1,0 +1,18 @@
+name: napari-nibabel
+display_name: Napari NiBabel
+contributions:
+  commands:
+    - id: napari-nibabel.get_reader
+      python_name: napari_nibabel._reader:napari_get_reader
+      title: Open data with Napari NiBabel
+    - id: napari-nibabel.make_sample_data
+      python_name: napari_nibabel._sample_data:make_sample_data
+      title: Load sample data from Napari NiBabel
+  readers:
+    - command: napari-nibabel.get_reader
+      accepts_directories: false
+      filename_patterns: ['*.npy']
+  sample_data:
+    - command: napari-nibabel.make_sample_data
+      display_name: Napari NiBabel
+      key: unique_id.1
