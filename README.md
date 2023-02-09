@@ -7,27 +7,22 @@
 [![codecov](https://codecov.io/gh/aganders3/napari-nibabel/branch/main/graph/badge.svg)](https://codecov.io/gh/aganders3/napari-nibabel)
 [![napari hub](https://img.shields.io/endpoint?url=https://api.napari-hub.org/shields/napari-nibabel)](https://napari-hub.org/plugins/napari-nibabel)
 
-Read access to some common neuroimaging file formats
+Read access to some common neuroimaging file formats, thanks to the
+[NiBabel](https://nipy.org/nibabel/) and [pydicom](https://pydicom.github.io/)
+libraries.
+
+Also check out [napari-medical-image-formats](https://www.napari-hub.org/plugins/napari-medical-image-formats)!
 
 ----------------------------------
 
 This [napari] plugin was generated with [Cookiecutter] using [@napari]'s [cookiecutter-napari-plugin] template.
 
-<!--
-Don't miss the full getting started guide to set up your new package:
-https://github.com/napari/cookiecutter-napari-plugin#getting-started
-
-and review the napari docs for plugin developers:
-https://napari.org/stable/plugins/index.html
--->
 
 ## Installation
 
 You can install `napari-nibabel` via [pip]:
 
     pip install napari-nibabel
-
-
 
 
 ## Contributing

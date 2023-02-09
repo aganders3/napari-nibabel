@@ -1,11 +1,24 @@
 """
-This module is an example of a barebones numpy reader plugin for napari.
-
-It implements the Reader specification, but your plugin may choose to
-implement multiple readers or even other plugin contributions. see:
-https://napari.org/stable/plugins/guides.html?#readers
+This reader exposes NiBabel and pydicom readers to napari.
 """
+import os
+
+import pydicom
+import nibabel as nib
 import numpy as np
+
+IGNORE = (
+    ".DS_Store",
+)
+
+EXTENSIONS = (
+    '.par',  # Philips PAR/REC files
+    '.hdr',  # hdr/img files (ANALYZE or NIfTI)
+    '.nii',  # NIfTI
+    '.nii.gz',  # NIfTI (compressed)
+    '.gii',  # GIfTI
+    '.dcm',  # DICOM
+)
 
 
 def napari_get_reader(path):
@@ -22,21 +35,20 @@ def napari_get_reader(path):
         If the path is a recognized format, return a function that accepts the
         same path or list of paths, and returns a list of layer data tuples.
     """
-    if isinstance(path, list):
-        # reader plugins may be handed single path, or a list of paths.
-        # if it is a list, it is assumed to be an image stack...
-        # so we are only going to look at the first file.
-        path = path[0]
-
-    # if we know we cannot read the file, we immediately return None.
-    if not path.endswith(".npy"):
+    # handle both a string and a list of strings
+    paths = [path] if isinstance(path, str) else path
+    paths = _flat_paths(paths)
+    if any(
+        os.path.splitext(p)[1] not in EXTENSIONS
+        for p in paths
+        if os.path.split(p)[1] not in IGNORE
+    ):
         return None
-
-    # otherwise we return the *function* that can read ``path``.
+    # return the *function* that can read ``path``.
     return reader_function
 
 
-def reader_function(path):
+def reader_function(path: str | list[str]):
     """Take a path or list of paths and return a list of LayerData tuples.
 
     Readers are expected to return data as a list of tuples, where each tuple
@@ -60,13 +72,65 @@ def reader_function(path):
     """
     # handle both a string and a list of strings
     paths = [path] if isinstance(path, str) else path
-    # load all files into array
-    arrays = [np.load(_path) for _path in paths]
-    # stack arrays into single array
-    data = np.squeeze(np.stack(arrays))
+    paths = _flat_paths(paths)
 
-    # optional kwargs for the corresponding viewer.add_* method
-    add_kwargs = {}
+    to_try_pydicom = []
+    layers = []
+    # first try to load paths with nibabel
+    for p in paths:
+        try:
+            ds = nib.load(p)
+        except nib.filebasedimages.ImageFileError:
+            to_try_pydicom.append(p)
+        else:
+            if isinstance(ds, nib.GiftiImage):
+                # TODO: add support for colors
+                # from what I see GIFTI specifies actual colors for the nodes
+                # where napari expects scalar values and a colormap
+                points = ds.get_arrays_from_intent("NIFTI_INTENT_POINTSET")
+                triangles = ds.get_arrays_from_intent("NIFTI_INTENT_TRIANGLE")
+                assert len(points) == 1 and len(triangles) == 1, (
+                    "unsupported GIFTI dataset"
+                )
+                layers.append(
+                    ((points[0].data, triangles[0].data), {}, "surface")
+                )
+            else:
+                layers.append((ds.get_fdata(),))
 
-    layer_type = "image"  # optional, default is "image"
-    return [(data, add_kwargs, layer_type)]
+    # any images that fail to load with nibabel, try loading with pydicom
+    dicom_datasets = {}
+    for p in to_try_pydicom:
+        try:
+            ds = pydicom.dcmread(p)
+            dicom_datasets.setdefault(ds.SeriesInstanceUID, []).append(ds)
+        except Exception:
+            raise ValueError(f"unable to read data in file '{p}'")
+
+    for uid, ds_list in dicom_datasets.items():
+        # return image layers that are stacks based on SeriesInstanceUID
+        if len(ds_list) > 1:
+            ds_list.sort(key=lambda x: list(x.ImagePositionPatient))
+            layers.append(
+                (
+                    np.stack(tuple(ds.pixel_array for ds in ds_list), 0),
+                ),
+            )
+        else:
+            layers.append((ds.pixel_array,))
+
+    return layers
+
+
+def _flat_paths(paths: list[str]) -> list[str]:
+    flat_paths = []
+    for p in paths:
+        if os.path.isdir(p):
+            flat_paths.extend(
+                os.path.join(p, f)
+                for f in os.listdir(p)
+                if f not in IGNORE
+            )
+        else:
+            flat_paths.append(p)
+    return flat_paths
