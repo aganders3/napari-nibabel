@@ -1,27 +1,52 @@
 """
 This reader exposes NiBabel and pydicom readers to napari.
 """
-import os
+from __future__ import annotations
 
-import pydicom
+import os
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
+
+if TYPE_CHECKING:
+    from typing import TypeAlias
+
 import nibabel as nib
 import numpy as np
+import pydicom
 
-IGNORE = (
-    ".DS_Store",
-)
+IGNORE = (".DS_Store",)
 
 EXTENSIONS = (
-    '.par',  # Philips PAR/REC files
-    '.hdr',  # hdr/img files (ANALYZE or NIfTI)
-    '.nii',  # NIfTI
-    '.nii.gz',  # NIfTI (compressed)
-    '.gii',  # GIfTI
-    '.dcm',  # DICOM
+    ".par",  # Philips PAR/REC files
+    ".hdr",  # hdr/img files (ANALYZE or NIfTI)
+    ".nii",  # NIfTI
+    ".nii.gz",  # NIfTI (compressed)
+    ".gii",  # GIfTI
+    ".dcm",  # DICOM
 )
+StrOrList: TypeAlias = Union[str, List[str]]
+LayerData: TypeAlias = Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]
+LayerDataList: TypeAlias = List[
+    Union[
+        Tuple[
+            LayerData,
+        ],
+        Tuple[LayerData, Optional[Dict[Any, Any]], str],
+    ]
+]
 
 
-def napari_get_reader(path):
+def napari_get_reader(
+    path: StrOrList,
+) -> Optional[Callable[[StrOrList], LayerDataList]]:
     """A basic implementation of a Reader contribution.
 
     Parameters
@@ -48,7 +73,7 @@ def napari_get_reader(path):
     return reader_function
 
 
-def reader_function(path: str | list[str]):
+def reader_function(path: StrOrList) -> LayerDataList:
     """Take a path or list of paths and return a list of LayerData tuples.
 
     Readers are expected to return data as a list of tuples, where each tuple
@@ -75,7 +100,7 @@ def reader_function(path: str | list[str]):
     paths = _flat_paths(paths)
 
     to_try_pydicom = []
-    layers = []
+    layers: LayerDataList = []
     # first try to load paths with nibabel
     for p in paths:
         try:
@@ -89,17 +114,18 @@ def reader_function(path: str | list[str]):
                 # where napari expects scalar values and a colormap
                 points = ds.get_arrays_from_intent("NIFTI_INTENT_POINTSET")
                 triangles = ds.get_arrays_from_intent("NIFTI_INTENT_TRIANGLE")
-                assert len(points) == 1 and len(triangles) == 1, (
-                    "unsupported GIFTI dataset"
-                )
+                assert (
+                    len(points) == 1 and len(triangles) == 1
+                ), "unsupported GIFTI dataset"
                 layers.append(
                     ((points[0].data, triangles[0].data), {}, "surface")
                 )
             else:
-                layers.append((ds.get_fdata(),))
+                data: np.ndarray = ds.get_fdata()
+                layers.append((data,))
 
     # any images that fail to load with nibabel, try loading with pydicom
-    dicom_datasets = {}
+    dicom_datasets: Dict[str, List[pydicom.Dataset]] = {}
     for p in to_try_pydicom:
         try:
             ds = pydicom.dcmread(p)
@@ -112,9 +138,7 @@ def reader_function(path: str | list[str]):
         if len(ds_list) > 1:
             ds_list.sort(key=lambda x: list(x.ImagePositionPatient))
             layers.append(
-                (
-                    np.stack(tuple(ds.pixel_array for ds in ds_list), 0),
-                ),
+                (np.stack(tuple(ds.pixel_array for ds in ds_list), 0),),
             )
         else:
             layers.append((ds.pixel_array,))
@@ -122,14 +146,12 @@ def reader_function(path: str | list[str]):
     return layers
 
 
-def _flat_paths(paths: list[str]) -> list[str]:
-    flat_paths = []
+def _flat_paths(paths: List[str]) -> List[str]:
+    flat_paths: List[str] = []
     for p in paths:
         if os.path.isdir(p):
             flat_paths.extend(
-                os.path.join(p, f)
-                for f in os.listdir(p)
-                if f not in IGNORE
+                os.path.join(p, f) for f in os.listdir(p) if f not in IGNORE
             )
         else:
             flat_paths.append(p)
