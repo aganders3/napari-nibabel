@@ -36,9 +36,7 @@ StrOrList: TypeAlias = Union[str, List[str]]
 LayerData: TypeAlias = Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]
 LayerDataList: TypeAlias = List[
     Union[
-        Tuple[
-            LayerData,
-        ],
+        Tuple[LayerData,],
         Tuple[LayerData, Optional[Dict[Any, Any]], str],
     ]
 ]
